@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ble-adv-analyze</title>
+</head>
+<body>
+Input advertisement data or scan response (space or comma separated data)<br/>
+<input type="text" id="adv" style="width:100%"/>
+<input type="button" value="ANALYZE" onclick="analyze()"/>
+
+<br/>
+<br/>
+results: <br/>
+<div id="results" style="border:1px solid;"></div>
+
+<script>
+  function analyze(){
+    let dataString = document.getElementById("adv").value;
+    let dataArray = [];
+    if(dataString.indexOf(",") >= 0){
+      dataArray = dataString.trim().split(",").map((e)=>{return e.trim()}).filter((e)=>{return e.length>0;}).map((e)=>{return parseInt(e)});
+    }else{
+      dataArray = dataString.trim().split(" ").map((e)=>{return e.trim()}).filter((e)=>{return e.length>0;}).map((e)=>{return parseInt(e)});
+    }
+
+    let meanings = [];
+    meanings.push( "raw data:" +array2string(dataArray));
+    meanings.push("<ul>");
+
+    for(let i = 0; i<dataArray.length; i++){
+      let rowLength = dataArray[i];
+      let row  = dataArray.slice(i+1,i+1+rowLength);
+      let data = advDataAnalyze(row);
+      meanings.push("<li>"+data.title+"</li>" + data.infomations.join("<br/>"));
+      meanings.push("<br/> raw data: " + array2string(dataArray.slice(i,i+1+rowLength)) );
+      i += rowLength;
+    }
+    meanings.push("</ul>");
+    document.getElementById("results").innerHTML = meanings.join("");
+  }
+
+
+  function advDataAnalyze(row){
+    let title;
+    let infomations = [];
+    let bytes = row.slice(1);
+    switch(row[0]) {
+      case 0x01:
+        title = "Flags";
+        let data = {
+          0x01:"LE Limited Discoverable Mode",
+          0x02:"LE General Discoverable Mode",
+          0x04:"BR/EDR Not Supported ",
+          0x08:"Simultaneous LE and BR/EDR to Same Device Capa- ble (Controller)",
+          0x10:"Simultaneous LE and BR/EDR to Same Device Capa- ble (Host)",
+          0x20:"unknown flag - 0x20",
+          0x40:"unknown flag - 0x40",
+          0x80:"unknown flag - 0x80",
+        };
+        for(let key in data){
+          if(parseInt(key) & bytes[0]){
+            infomations.push(data[key]);
+          }
+        }
+        break;
+      case 0x02: // Incomplete List of 16-bit Service Class UUID
+      case 0x03: // Complete List of 16-bit Service Class UUIDs
+        title = "16-bit Service UUIDs";
+        for (let j = 0; j < bytes.length; j += 2) {
+          let uuid = bytes.slice(j, j + 2).map((e)=>{return e.toString(16).padStart(2,"0")}).reverse().join('');
+          infomations.push("uuid - " + uuid);
+        }
+        break;
+
+      case 0x06: // Incomplete List of 128-bit Service Class UUIDs
+      case 0x07: // Complete List of 128-bit Service Class UUIDs
+        title = "128-bit Service UUIDs";
+        for (let j = 0; j < bytes.length; j += 16) {
+          let uuid = bytes.slice(j, j + 16).map((e)=>{return e.toString(16).padStart(2,"0")}).reverse().join('');
+          infomations.push("uuid - " + uuid);
+        }
+        break;
+
+      case 0x08: // Shortened Local Name
+      case 0x09: // Complete Local Name»
+        title = "Local Name";
+        infomations.push('"'+String.fromCharCode.apply(null, bytes)+'"');
+        break;
+
+      case 0x0a: // Tx Power Level
+        title = "Tx Power Level";
+        infomations.push(bytes[0]);
+        break;
+
+      case  0x14: // List of 16 bit solicitation UUIDs
+        title = "16-bit solicitation UUIDs";
+        for (let j = 0; j < bytes.length; j += 2) {
+          let uuid = bytes.slice(j, j + 2).map((e)=>{return e.toString(16).padStart(2,"0")}).reverse().join('');
+          infomations.push("uuid - " + uuid);
+        }
+
+        break;
+
+      case  0x15: // List of 128 bit solicitation UUIDs
+        title = "128-bit solicitation UUIDs";
+        for (let j = 0; j < bytes.length; j += 16) {
+          let uuid = bytes.slice(j, j + 16).map((e)=>{return e.toString(16).padStart(2,"0")}).reverse().join('');
+          infomations.push("uuid - " + uuid);
+        }
+        break;
+
+      case 0x16: // 16-bit Service Data, there can be multiple occurences
+        title = "16-bit Service Data";
+        let serviceDataUuid = bytes.slice(0, 2).map((e)=>{return e.toString(16).padStart(2,"0")}).reverse().join('');
+        let serviceData = bytes.slice(2, bytes.length);
+        infomations.push("uuid - " + serviceDataUuid );
+        infomations.push("serviceData - " + array2string(serviceData));
+        break;
+
+      case 0x20: // 32-bit Service Data, there can be multiple occurences
+        title = "32-bit Service Data";
+        let serviceData32Uuid = bytes.slice(0, 4).map((e)=>{return e.toString(16).padStart(2,"0")}).reverse().join('');
+        let serviceData32 = bytes.slice(4, bytes.length);
+        infomations.push("uuid - " + serviceData32Uuid + "<br/>serviceData - " + array2string(serviceData32));
+
+        break;
+
+      case 0x21: // 128-bit Service Data, there can be multiple occurences
+        title = "128-bit Service Data";
+        let serviceData128Uuid = bytes.slice(0, 16).map((e)=>{return e.toString(16).padStart(2,"0")}).reverse().join('');
+        let serviceData128 = bytes.slice(16, bytes.length);
+        infomations.push("uuid - " + serviceData128Uuid + "<br/>serviceData - " + array2string(serviceData128));
+
+        break;
+
+
+      case 0xff: // 128-bit Service Data, there can be multiple occurences
+        if(bytes[0] === 0x4c
+            && bytes[1] === 0x00
+            && bytes[2] === 0x02
+            && bytes[3] === 0x15
+            && bytes.length === 25) {
+          title = "Manufacturer Specific Data - iBeacon";
+          let uuidData = bytes.slice(4, 20);
+          let uuid = "";
+          for(let i = 0; i< uuidData.length;i++){
+            uuid = uuid +uuidData[i].toString(16).padStart(2,"0");
+            if(i === (4-1) ||i === (4+2-1) ||i === (4+2*2-1) ||i === (4+2*3-1) ){
+              uuid += "-";
+            }
+          }
+
+          let major = "0x" + ((bytes[20]<<8) + bytes[21]).toString(16).padStart(4,"0");
+          let minor = "0x" + ((bytes[22]<<8) + bytes[23]).toString(16).padStart(4,"0");
+          let power = "0x" + (bytes[24]).toString(16).padStart(2,"0");
+
+
+          infomations.push("uuid : " + uuid);
+          infomations.push("major : " + major);
+          infomations.push("minor : " + minor);
+          infomations.push("power : " + power);
+
+        }else{
+          title = "Manufacturer Specific Data";
+          infomations.push(array2string(row.slice(1)));
+        }
+        break;
+
+
+      default :
+        title = "unhandled type";
+        infomations.push(array2string(row.slice(1)));
+        break;
+
+    }
+    title += "(0x"+ row[0].toString(16).padStart(2,"0") +")";
+    return {title, infomations};
+  }
+
+
+  function array2string(arr){
+    if(!arr || !Array.isArray(arr) ){
+      return "undefined";
+    }
+    if(arr.length === 0 ){
+      return "[ ]";
+    }
+    return "[" + arr.map((elm)=>{
+      return "0x" + parseInt(elm).toString(16).padStart(2,"0");
+  }).join(", ") + "]";
+  }
+</script>
+</body>
+</html>
