@@ -2,26 +2,41 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ble-adv-analyze</title>
+  <title>BLE adv analyze</title>
 </head>
 <body>
+<h1>BLE adv analyze</h1>
+<a href="https://github.com/9wick/ble-adv-analyze/blob/master/README.md">How to use</a>
+
+<br/>
+<br/>
 Input advertisement data or scan response (space or comma separated data)<br/>
-<input type="text" id="adv" style="width:100%"/>
+<input type="text" id="adv" style="width:100%"/><br/>
+number type :
+<input type="radio" name="number_type" id="number_type_hex" value="hex" checked><label for="number_type_hex">HEX(0x0〜0xFF)</label>
+<input type="radio" name="number_type" id="number_type_dec"  value="dec"><label for="number_type_dec">DEC(0~255)</label><br/>
 <input type="button" value="ANALYZE" onclick="analyze()"/>
 
 <br/>
 <br/>
 results: <br/>
-<div id="results" style="border:1px solid;"></div>
+<div id="results" style="border:1px solid;min-height: 100px;"></div>
+
+<p />
 
 <script>
   function analyze(){
     let dataString = document.getElementById("adv").value;
     let dataArray = [];
     if(dataString.indexOf(",") >= 0){
-      dataArray = dataString.trim().split(",").map((e)=>{return e.trim()}).filter((e)=>{return e.length>0;}).map((e)=>{return parseInt(e)});
+      dataArray = dataString.trim().split(",").map((e)=>{return e.trim()}).filter((e)=>{return e.length>0;});
     }else{
-      dataArray = dataString.trim().split(" ").map((e)=>{return e.trim()}).filter((e)=>{return e.length>0;}).map((e)=>{return parseInt(e)});
+      dataArray = dataString.trim().split(" ").map((e)=>{return e.trim()}).filter((e)=>{return e.length>0;});
+    }
+    if ( document.getElementById( "number_type_hex" ).checked) {
+      dataArray = dataArray.map((e)=>{return parseInt(e,16)});
+    }else{
+      dataArray = dataArray.map((e)=>{return parseInt(e)});
     }
 
     let meanings = [];
@@ -188,7 +203,7 @@ results: <br/>
     }
     return "[" + arr.map((elm)=>{
       return "0x" + parseInt(elm).toString(16).padStart(2,"0");
-  }).join(", ") + "]";
+    }).join(", ") + "]";
   }
 </script>
 </body>
